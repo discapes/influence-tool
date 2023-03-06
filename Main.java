@@ -1,10 +1,23 @@
-import java.util.zip.*;
-import java.io.*;
-import java.util.*;
-import java.nio.charset.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.net.*;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 public class Main {
     public static String MAGIC = "Ez6z3k1V477xY73D57I3m23L";
@@ -38,14 +51,13 @@ public class Main {
 
     /* renamed from: c */
     public static String createHash(Collection<String> collection) {
+        // System.out.println("Hashing " + collection.toString());
         StringBuilder sb = new StringBuilder();
         for (String str : collection) {
             sb.append(str);
         }
         sb.append(MAGIC);
         String sb2 = sb.toString();
-        PrintStream printStream = System.out;
-        printStream.println("Hash input\n" + sb2);
         return hashInner(sb2, collection.size());
     }
 
@@ -54,17 +66,8 @@ public class Main {
         return createHash(Arrays.asList(strArr));
     }
 
-    public static void main(String args[]) throws IOException {
-
-        String hash = hash("g16003158497410364065", "en", "302032", "1678117866544",
-                "matchId=334548&turnData=H4sIAAAAAAAA%2F7WTuw6CMBSG3%2BXMHXoxMXTTOBviahwqPUUjiCklDoR3txgSE7l0AMbT%2F%2FTLd3qpQTmnksdBOQXyXHclyBoSzLJjlV%2FRgow2BLTKVYqxLXSVoAbJCbyKN9qdcW0L68o9msKijxu%2FBQ0%2BS%2BzRRJ9Gp2nU08w9vbkTllXmfENDxmQZXdSW0ZV12QB%2Fhi7j6%2BryZXX5yrpigD9DV7AldC9dy%2B%2FbaR23CyC35P86v8ON5lRM5lEg3gTogZxN4%2F1jmc5FYDoeyIU%2Fy%2BYD7lEGnsUEAAA%3D&timestamp=1678117183");
-        System.out.println(hash);
-
-        if (true)
-            return;
-        String str = "H4sIAAAAAAAAALWTPQ%2BCMBCG%2F8vNDP1woZvG2RBX41DpFY0gppQ4EP67hZCYCLQDMLbv3ZPn%2BtGAtFamz6O0EsSlGZYgGkgxz091cUMDIt5FoGQhM0xMqeoUFQgWwbv8oNlr25XQYXlAXRp0cetaUOOrwhGNj2nETyOOph%2FZ3Z6xqnPrCtpoTpaSVW0p2ViXTvAX6FK2rS5bV5dtrMsn%2BAt0OV1D9zqU%2FL6dUkm30Xf%2FXWc%2F3GxOuDePA%2FEuQA%2Fk1I93j8Wf88B0LJBzd5btF6N4ZObFBAAA";
-
-        byte[] bytes = Base64.getDecoder().decode(URLDecoder.decode(str, StandardCharsets.UTF_8));
+    public static String modifyTurnData(String base64) throws IOException {
+        byte[] bytes = Base64.getDecoder().decode(base64);
 
         ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
         GZIPInputStream gzis = new GZIPInputStream(bais);
@@ -82,6 +85,49 @@ public class Main {
         gzos.close();
         byte[] bytes2 = baos.toByteArray();
         baos.close();
-        System.out.println(URLEncoder.encode(Base64.getEncoder().encodeToString(bytes2), StandardCharsets.UTF_8));
+        return Base64.getEncoder().encodeToString(bytes2);
+    }
+
+    public static Map<String, String> parseHeaders(String headerLine) {
+        String[] matches = Pattern.compile("b'(.*?)'")
+                .matcher(headerLine)
+                .results()
+                .map(m -> m.group((1)))
+                .toArray(String[]::new);
+
+        Map<String, String> headers = new HashMap<>();
+        for (int i = 0; i < matches.length; i += 2) {
+            headers.put(matches[i], matches[i + 1]);
+        }
+        return headers;
+    }
+
+    public static String match(String data, String regex) {
+        Matcher m = Pattern.compile(regex).matcher(data);
+        if (!m.find())
+            return null;
+        return m.group(1);
+    }
+
+    public static void main(String args[]) throws IOException {
+        Scanner scanner = new Scanner(new File("request.txt"));
+        String headerLine = scanner.nextLine();
+        String contentLine = scanner.nextLine();
+
+        String turnData = URLDecoder.decode(match(contentLine, "turnData=(.*?)&"), StandardCharsets.UTF_8);
+        Map<String, String> headers = parseHeaders(headerLine);
+
+        String newTurnData = modifyTurnData(turnData);
+        String newContent = contentLine.replaceAll("turnData=.*?&",
+                "turnData=" + URLEncoder.encode(newTurnData, StandardCharsets.UTF_8) + "&");
+
+        assert (headers.get("hash").equals(hash(headers.get("uid"), headers.get("lang"), headers.get("version"),
+                headers.get("time"), contentLine)));
+        String newHash = hash(headers.get("uid"), headers.get("lang"), headers.get("version"),
+                headers.get("time"), newContent);
+
+        System.out.println();
+        System.out.println(newTurnData);
+        System.out.println(newHash);
     }
 }

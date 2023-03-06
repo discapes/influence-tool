@@ -6,16 +6,10 @@
 	"configurations": [
 		{
 			"type": "java",
-			"name": "Current File",
-			"request": "launch",
-			"mainClass": "${file}"
-		},
-		{
-			"type": "java",
-			"name": "Main",
+			"name": "Launch Java Program",
 			"request": "launch",
 			"mainClass": "Main",
-			"projectName": "toomuchinfluence_2d98b9f8"
+			"vmArgs": "-ea"
 		}
 	]
 }
